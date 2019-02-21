@@ -114,7 +114,7 @@ def collate_fn(batch):
         """Checks if we are not getting a list of None"""
         return list_[0] is not None
     
-    # Lens
+    ## Lens
     if exists(mfccs): 
         inputs_lens = torch.IntTensor([len(m) for m in mfccs])
     elif exists(ivectors):
@@ -122,16 +122,16 @@ def collate_fn(batch):
     else:
         inputs_lens = torch.IntTensor([1] * len(batch))
         
+    # Sorting order (needs to be descending in lens for the padder)
+    inputs_lens, sorted_idx = inputs_lens.sort(descending=True)
+        
     if exists(transcripts):
         transcripts_lens = torch.IntTensor([len(t) for t in transcripts])
+        transcripts_lens = transcripts_lens[sorted_idx]
     else:
         transcripts_lens = None
         
-    # Sorting order (needs to be descending in lens)
-    
-    inputs_lens, sorted_idx = inputs_lens.sort(descending=True)
-        
-    # Inputs
+    ## Inputs
     inputs = []
     if exists(mfccs):
         inputs.append(nn.utils.rnn.pad_sequence(mfccs, batch_first=True))
@@ -154,7 +154,7 @@ def collate_fn(batch):
     inputs = torch.cat(inputs, dim=2)
     inputs = inputs[sorted_idx]
     
-    # Outputs
+    ## Outputs
     if exists(transcripts):
         transcripts = np.asarray(transcripts)[sorted_idx]
         transcripts = torch.IntTensor([t for trs in transcripts for t in trs]) 

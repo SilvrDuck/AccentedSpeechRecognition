@@ -75,7 +75,15 @@ def check_wer(transcripts, transcripts_lens, out, out_lens, decoder, target_deco
         
     decoded_output, _ = decoder.decode(out.data.transpose(0,1), out_lens)
     target_strings = target_decoder.convert_to_strings(split_transcripts)
-     
+           
+    #if True:
+    #    print('targets', targets)
+    #    print('split_targets', split_targets)
+    #    print('out', out)
+    #    print('output_len', output_len)
+    #    print('decoded', decoded_output)
+    #    print('target', target_strings)
+        
     wer, cer = 0, 0
     for x in range(len(target_strings)):
         transcript, reference = decoded_output[x][0], target_strings[x][0]
@@ -123,12 +131,12 @@ def test(model, test_loader, criterion, decoder, target_decoder, losses_mix):
                 wer = check_wer(transcripts, transcripts_lens, 
                                 out_text, out_lens, decoder, target_decoder)
             else:
-                wer = [None]
+                wer = None
 
             if out_accent is not None:
                 accent_acc = check_acc(accents, out_accent)
             else:
-                accent_acc = [None]
+                accent_acc = None
 
             epoch_losses.append(loss)
             epoch_losses_text.append(loss_text)

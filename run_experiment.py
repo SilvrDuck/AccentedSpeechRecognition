@@ -10,7 +10,8 @@ from tensorboardX import SummaryWriter
 from pathlib import Path
 import math
 from utils import now_str
-
+import gc
+    
 def run_experiment(_exp_name,
                    _epochs,
                    _train_manifest, 
@@ -110,7 +111,8 @@ def run_experiment(_exp_name,
                       nb_speech_layers = _nb_speech_layers,
                       nb_accents_layers = _nb_accents_layers,
                       bidirectional = _bidirectional,
-                      bottleneck_size = _bottleneck_size)
+                      bottleneck_size = _bottleneck_size,
+                      DEBUG=False)
     if _cuda:
         model = model.cuda()
     
@@ -151,6 +153,7 @@ def run_experiment(_exp_name,
     best_acc = 0
     
     for epoch in range(1, _epochs + 1):
+        gc.collect()
         
         ### TRAIN    
         print(f'Epoch {epoch} training')
@@ -215,15 +218,20 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='DeepSpeech model information')
     parser.add_argument('--train', action='store_true', help='Uses the train set instead of the dev set.')
+    parser.add_argument('--epochs', default=None, type=int, help='Number of training epochs')
+    parser.add_argument('--patch_path', default='experiments.cfg', type=str, help='Path to experiment list')
     args = parser.parse_args()
     
-    DEV = False if args.train else True
+    DEV = not args.train
+    PATCH_PATH = args.patch_path
+    EPOCHS = args.epochs
     
     import config
     confs = config.Config()
     
-    for conf in confs.create_multi_dict():
-        exp_name = 'DEV' if DEV else 'TRAIN'
+    for conf in confs.patch_config(PATCH_PATH):
+        exp_name = conf['exp_name_prefix']
+        exp_name += '_DEV' if DEV else '_TRAIN'
         exp_name += '__in'
         exp_name += '_mfcc' if conf['use_mfcc_in'] else '' 
         exp_name += '_ivect' if conf['use_ivectors_in'] else '' 
@@ -237,10 +245,12 @@ if __name__ == '__main__':
         exp_name += f'__bnf-{conf["bottleneck_size"]}'
         exp_name += f'__{now_str()}'
         
+        train_manifest = conf['dev_manifest'] if DEV else conf['train_manifest']
+        epochs = EPOCHS if EPOCHS is not None else conf['epochs']
+        
         try:
-            train_manifest = conf['dev_manifest'] if DEV else conf['train_manifest']
             run_experiment(_exp_name = exp_name,
-                           _epochs = conf['epochs'],
+                           _epochs = epochs,
                            _train_manifest = train_manifest, 
                            _test_manifest = conf['test_manifest'], 
                            _labels = conf['labels'], 
@@ -271,5 +281,6 @@ if __name__ == '__main__':
                            _tensorboard_path = conf['tensorboard_path'],
                            _saved_models_path = conf['saved_models_path'],
                            _bottleneck_size = conf['bottleneck_size'])
+            
         except Exception as e:
             print(f'Error occured in run {exp_name}:', e)

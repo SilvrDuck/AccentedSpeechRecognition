@@ -303,7 +303,7 @@ class MultiTask(nn.Module):
         
     def forward(self, x, lengths):
         x, out_len = self.Head(x, lengths)
-        x_stt, x_acc = None, None
+        x_stt, x_acc, bnf = None, None, None
         
         if self._meta['use_transcripts_out']:
             x_stt = self.SpeechToText(x, out_len)

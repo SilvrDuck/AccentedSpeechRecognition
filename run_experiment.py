@@ -5,12 +5,14 @@ from model import MultiTask
 from decoder import GreedyDecoder, BeamCTCDecoder
 from training import train, test
 import torch
+import torch.nn as nn
 from os import makedirs
 from tensorboardX import SummaryWriter
 from pathlib import Path
 import math
 from utils import now_str
 import gc
+
     
 def run_experiment(_exp_name,
                    _epochs,
@@ -43,7 +45,8 @@ def run_experiment(_exp_name,
                    _cuda,
                    _tensorboard_path,
                    _saved_models_path,
-                   _bottleneck_size):
+                   _bottleneck_size,
+                   _accent_loss):
     
     print(f'\n##### Running experiment {_exp_name} #####')
     
@@ -70,6 +73,7 @@ def run_experiment(_exp_name,
                                  use_mfcc_in=_use_mfcc_in, 
                                  use_ivectors_in=_use_ivectors_in, 
                                  use_embeddings_in=_use_embeddings_in, 
+                                 embedding_size=_embedding_size,
                                  use_transcripts_out=_use_transcripts_out, 
                                  use_accents_out=_use_accents_out)
     
@@ -84,6 +88,7 @@ def run_experiment(_exp_name,
                                 use_mfcc_in=_use_mfcc_in, 
                                 use_ivectors_in=_use_ivectors_in, 
                                 use_embeddings_in=_use_embeddings_in, 
+                                embedding_size=_embedding_size,
                                 use_transcripts_out=_use_transcripts_out, 
                                 use_accents_out=_use_accents_out)
 
@@ -115,7 +120,7 @@ def run_experiment(_exp_name,
                       DEBUG=False)
     if _cuda:
         model = model.cuda()
-    
+        
     print(model, '\n')
     print('Model parameters counts:', MultiTask.get_param_size(model), '\n')
     
@@ -125,8 +130,16 @@ def run_experiment(_exp_name,
     optimizer = torch.optim.Adam(model.parameters(), lr=_learning_rate)
     
     # Criterion
+    if _use_accents_out:
+        if _accent_loss == 'focal':
+            AccLoss = FocalLoss()
+        elif _accent_loss == 'CE':
+            AccLoss = nn.CrossEntropyLoss()
+        else:
+            raise ValueError(f'Loss {_accent_loss} for accent_loss is unknown. Please use either "focal" or "CE".')
+    
     if not _use_transcripts_out: # only accent classification
-        criterion = FocalLoss()
+        criterion = AccLoss
     elif not _use_accents_out: # only text recognition
         criterion = CTCLoss()
     else: # both tasks
@@ -153,17 +166,15 @@ def run_experiment(_exp_name,
     best_acc = 0
     
     for epoch in range(1, _epochs + 1):
-        gc.collect()
-        
         ### TRAIN    
         print(f'Epoch {epoch} training')
         train_results = train(model, train_loader, criterion, optimizer, losses_mix=_losses_mix)
-        train_loss, train_loss_text, train_loss_accent = train_results
+        train_loss, train_loss_text, train_loss_accent = train_results        
 
         results_dict['train_loss'].append(train_loss)
         results_dict['train_loss_text'].append(train_loss_text)
         results_dict['train_loss_accent'].append(train_loss_accent)
-        print(f'Epoch {epoch} training loss: {train_loss.item()}')
+        print(f'Epoch {epoch} training loss: {train_loss}')
         
         ### TEST
         print(f'Epoch {epoch} testing')
@@ -175,7 +186,7 @@ def run_experiment(_exp_name,
         results_dict['test_loss_accent'].append(test_loss_accent)
         results_dict['test_wer'].append(test_wer)
         results_dict['test_accent_acc'].append(test_accent_acc)
-        print(f'Epoch {epoch} testing loss: {test_loss.item()}')
+        print(f'Epoch {epoch} testing loss: {test_loss}')
         
         # Add values to tensorboard
         for key, results in results_dict.items():
@@ -207,7 +218,10 @@ def run_experiment(_exp_name,
                                 accent_train_losses=results_dict['train_loss_accent'],
                                 accent_test_losses=results_dict['test_loss_accent'],
                                 accent_accuracies=results_dict['test_accent_acc'])
-            
+    
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
     ## end of run_experiment ##
 
     
@@ -238,7 +252,7 @@ if __name__ == '__main__':
         exp_name += '_emb' if conf['use_embeddings_in'] else ''
         exp_name += '__out'
         exp_name += '_transcripts' if conf['use_transcripts_out'] else '' 
-        exp_name += f'_accents-mix{conf["losses_mix"]}' if conf['use_accents_out'] else ''
+        exp_name += f'_accents-mix{conf["losses_mix"]}-{conf["accent_loss"]}' if conf['use_accents_out'] else ''
         exp_name += f'__nblyrs-head-{conf["nb_head_layers"]}'
         exp_name += f'-speech-{conf["nb_speech_layers"]}'
         exp_name += f'-accent-{conf["nb_accents_layers"]}'
@@ -280,7 +294,8 @@ if __name__ == '__main__':
                            _cuda = conf['cuda'],
                            _tensorboard_path = conf['tensorboard_path'],
                            _saved_models_path = conf['saved_models_path'],
-                           _bottleneck_size = conf['bottleneck_size'])
-            
+                           _bottleneck_size = conf['bottleneck_size'],
+                           _accent_loss = conf['accent_loss'])
+        
         except Exception as e:
             print(f'Error occured in run {exp_name}:', e)

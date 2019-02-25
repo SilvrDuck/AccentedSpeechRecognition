@@ -15,7 +15,7 @@ class MultiDataset(Dataset):
 
     def __init__(self, manifest, labels, manifest_separator=',',
                use_mfcc_in=True, use_ivectors_in=False, use_embeddings_in=False,
-               use_transcripts_out=True, use_accents_out=False):
+               embedding_size=100, use_transcripts_out=True, use_accents_out=False):
         """
         Allows to chose what will be trained on, and what are the outputs.
         At least on input and one output is needed.
@@ -38,6 +38,7 @@ class MultiDataset(Dataset):
         self.config['use_mfcc_in']=use_mfcc_in
         self.config['use_ivectors_in']=use_ivectors_in
         self.config['use_embeddings_in']=use_embeddings_in
+        self.config['embedding_size']=embedding_size
         self.config['use_transcripts_out']=use_transcripts_out
         self.config['use_accents_out']=use_accents_out
 
@@ -66,7 +67,12 @@ class MultiDataset(Dataset):
             ivector = load_array(ivector_path)
             
         if self.config['use_embeddings_in']:
-            embedding = torch.load(embedding_path, map_location=lambda storage, loc: storage)
+            new_embedding_path = []
+            for split in embedding_path.split('/'):
+                new = split if 'embedding' not in split else ''.join([split, '_', str(self.config['embedding_size'])])
+                new_embedding_path.append(new)
+            new_embedding_path = '/'.join(new_embedding_path)
+            embedding = torch.load(new_embedding_path, map_location=lambda storage, loc: storage)
             # map_location and loc are there to load the embedding on the CPU
             
         # Outputs
@@ -76,7 +82,7 @@ class MultiDataset(Dataset):
         if self.config['use_accents_out']:
             accent = self.accent_dict[accent_label]
             accent = torch.LongTensor([accent])
-
+        
         return mfcc, ivector, embedding, parsed_transcript, accent
         
         
@@ -156,7 +162,9 @@ def collate_fn(batch):
     
     ## Outputs
     if exists(transcripts):
-        transcripts = np.asarray(transcripts)[sorted_idx]
+        if inputs.size(0) == 1: # bugfix for when only one sample
+            transcripts = [transcripts]
+        transcripts = np.asarray(transcripts)[sorted_idx] # dtype=object because some transcripts were loaded with wrong type (Int64). TODO fix.
         transcripts = torch.IntTensor([t for trs in transcripts for t in trs]) 
         # we need text targets as one concatenated vector
         

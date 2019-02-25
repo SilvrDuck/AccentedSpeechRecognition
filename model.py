@@ -272,16 +272,16 @@ class MultiTask(nn.Module):
         
         super(MultiTask, self).__init__()
             
-        feature_len = 0
-        feature_len += mfcc_size if use_mfcc_in else 0
-        feature_len += ivector_size if use_ivectors_in else 0
-        feature_len += embedding_size if use_embeddings_in else 0
+        self.feature_len = 0
+        self.feature_len += mfcc_size if use_mfcc_in else 0
+        self.feature_len += ivector_size if use_ivectors_in else 0
+        self.feature_len += embedding_size if use_embeddings_in else 0
             
         self.Head = Head(rnn_type=rnn_type, 
                          rnn_hidden_size=rnn_hidden_size,
                          nb_layers=nb_head_layers, 
                          bidirectional=bidirectional,
-                         feature_len=feature_len,
+                         feature_len=self.feature_len,
                          DEBUG=DEBUG)
             
         if self._meta['use_transcripts_out']:
@@ -349,7 +349,7 @@ class MultiTask(nn.Module):
             DEBUG = meta['DEBUG'],
         )
         model.load_state_dict(package['state_dict'])
-        return model
+        return model, package
         
     @staticmethod
     def serialize(model, 

@@ -1,6 +1,7 @@
 from tqdm import tqdm
 import torch
 import numpy as np
+import gc
 
 def get_mixed_loss(criterion, out_text, out_accent, out_lens, accents, transcripts, transcripts_lens, mix=0.5, corrective_coef=1000):
     loss, loss_text, loss_accent = None, None, None
@@ -24,7 +25,6 @@ def get_mixed_loss(criterion, out_text, out_accent, out_lens, accents, transcrip
 ### TRAINING
 
 def train(model, train_loader, criterion, optimizer, losses_mix=None):
-
     epoch_losses = []
     epoch_losses_text = []
     epoch_losses_accent = []
@@ -32,6 +32,7 @@ def train(model, train_loader, criterion, optimizer, losses_mix=None):
     model.train()
 
     for data in tqdm(train_loader, total=len(train_loader)):
+        
         inputs, inputs_lens, transcripts, transcripts_lens, accents = data
 
         if next(model.parameters()).is_cuda:
@@ -47,21 +48,41 @@ def train(model, train_loader, criterion, optimizer, losses_mix=None):
                                                       out_lens, accents, transcripts, 
                                                       transcripts_lens, losses_mix)
 
-        epoch_losses.append(loss)
-        epoch_losses_text.append(loss_text)
-        epoch_losses_accent.append(loss_accent)
-
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        
+        l = loss.clone().item() if loss is not None else None
+        lt = loss_text.clone().item() if loss_text is not None else None
+        la = loss_accent.clone().item() if loss_accent is not None else None
+        epoch_losses.append(l)
+        epoch_losses_text.append(lt)
+        epoch_losses_accent.append(la)
+                
+        del data
+        del inputs
+        del inputs_lens
+        del transcripts
+        del transcripts_lens
+        del accents
+        del loss
+        del loss_text
+        del loss_accent
+        del out_text
+        del out_accent
+        del out_lens
+        del __
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     average_loss = lambda l: sum(l) / len(train_loader) if l[0] is not None else -1
 
-    epoch_loss = average_loss(epoch_losses)
-    epoch_loss_text = average_loss(epoch_losses_text)
-    epoch_loss_accent = average_loss(epoch_losses_accent)
-
-    return epoch_loss, epoch_loss_text, epoch_loss_accent
+    epoch_loss_i = average_loss(epoch_losses)
+    epoch_loss_text_i = average_loss(epoch_losses_text)
+    epoch_loss_accent_i = average_loss(epoch_losses_accent)
+    
+    return epoch_loss_i, epoch_loss_text_i, epoch_loss_accent_i
 
 
 ### TESTING
@@ -97,10 +118,10 @@ def check_acc(accents, out):
     out_arg = np.argmax(out, axis=1)
     diff = torch.eq(out_arg, accents.cpu())
     acc = torch.sum(diff)
-    return acc / len(accents) * 100
+    return acc.item() / len(accents) * 100
 
 
-def test(model, test_loader, criterion, decoder, target_decoder, losses_mix):
+def test(model, test_loader, criterion, decoder, target_decoder, losses_mix=None):
     with torch.no_grad():
         model.eval()
 
@@ -137,13 +158,37 @@ def test(model, test_loader, criterion, decoder, target_decoder, losses_mix):
                 accent_acc = check_acc(accents, out_accent)
             else:
                 accent_acc = None
-
-            epoch_losses.append(loss)
-            epoch_losses_text.append(loss_text)
-            epoch_losses_accent.append(loss_accent)
+            
+            l = loss.clone().item() if loss is not None else None
+            lt = loss_text.clone().item() if loss_text is not None else None
+            la = loss_accent.clone().item() if loss_accent is not None else None
+            epoch_losses.append(l)
+            epoch_losses_text.append(lt)
+            epoch_losses_accent.append(la)
 
             epoch_wers.append(wer)
             epoch_accent_accs.append(accent_acc)
+            
+            del wer
+            del accent_acc
+            del data
+            del inputs
+            del inputs_lens
+            del transcripts
+            del transcripts_lens
+            del accents
+            del loss
+            del loss_text
+            del loss_accent
+            del out_text
+            del out_accent
+            del out_lens
+            del __
+            
+            gc.collect()
+            torch.cuda.empty_cache()
+                    
+                
 
         average_loss = lambda l: sum(l) / len(test_loader) if l[0] is not None else -1
 

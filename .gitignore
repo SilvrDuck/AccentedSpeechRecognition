@@ -1,6 +1,7 @@
 *.wav
 mfccs/
-embeddings/
+embeddings*/
+*_dataset/
 txt/
 wav/
 ivectors/

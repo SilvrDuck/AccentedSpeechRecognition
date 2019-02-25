@@ -41,7 +41,6 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='DeepSpeech model information')
     parser.add_argument('model_path', type=str, help='Path to model')
-    parser.add_argument('--lm', type=str, help='Path to language model')
     args = parser.parse_args()
     
     import config
@@ -67,28 +66,28 @@ if __name__ == '__main__':
     else: # both tasks
         criterion = (CTCLoss(), FocalLoss())
         
-        
-    # Decoders
-    
-    lm_path = args.lm if args.lm else confs['lm_path']
-    if model._meta['use_transcripts_out']:
-        decoder = BeamCTCDecoder(confs['labels'], 
-                                 lm_path=lm_path,
-                                 alpha=confs['decoder_alpha'], 
-                                 beta=confs['decoder_beta'],
-                                 cutoff_top_n=confs['decoder_cutoff_top_n'],
-                                 cutoff_prob=confs['decoder_cutoff_top_n'],
-                                 beam_width=confs['decoder_beam_width'], 
-                                 num_processes=confs['num_workers'])
-        
-        target_decoder = GreedyDecoder(confs['labels'])
-    else:
-        decoder, target_decoder = None, None
     
     # Results
     results = {}
-    for manifest in confs['testing_manifests']:
+    for manifest, lm in confs['testing_manifests']:
         print(f'Testing {manifest}')
+        
+        # Decoder
+        if model._meta['use_transcripts_out']:
+            decoder = BeamCTCDecoder(confs['labels'], 
+                                     lm_path=lm,
+                                     alpha=confs['decoder_alpha'], 
+                                     beta=confs['decoder_beta'],
+                                     cutoff_top_n=confs['decoder_cutoff_top_n'],
+                                     cutoff_prob=confs['decoder_cutoff_top_n'],
+                                     beam_width=confs['decoder_beam_width'], 
+                                     num_processes=confs['num_workers'])
+
+            target_decoder = GreedyDecoder(confs['labels'])
+        else:
+            decoder, target_decoder = None, None
+        
+        # Test
         results[manifest.split('/')[-1]] = result_for_manifest(model, criterion, manifest, decoder, target_decoder, confs['batch_size'], confs['num_workers'])
         
     for name, res in results.items():

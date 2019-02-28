@@ -13,7 +13,21 @@ import math
 from utils import now_str
 import gc
 
-    
+manual_seed = 1337
+torch.manual_seed(manual_seed)
+torch.cuda.manual_seed_all
+print(f'Using torch manual seed {manual_seed}.')
+
+### Start timer
+min_ = 0
+if min_ > 0:
+    print(f'WARNING TIMER {min_} min')
+    import time ; from tqdm import tqdm
+    for __ in tqdm(range(min_)):
+        time.sleep(60)
+###
+
+
 def run_experiment(_exp_name,
                    _epochs,
                    _train_manifest, 
@@ -167,7 +181,7 @@ def run_experiment(_exp_name,
     
     for epoch in range(1, _epochs + 1):
         ### TRAIN    
-        print(f'Epoch {epoch} training')
+        print(f'Epoch {epoch} training: {exp_name}')
         train_results = train(model, train_loader, criterion, optimizer, losses_mix=_losses_mix)
         train_loss, train_loss_text, train_loss_accent = train_results        
 

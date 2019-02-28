@@ -5,7 +5,7 @@ import gc
 
 def get_mixed_loss(criterion, out_text, out_accent, out_lens, accents, transcripts, transcripts_lens, mix=0.5, corrective_coef=1000):
     loss, loss_text, loss_accent = None, None, None
- 
+
     if out_text is None:
         loss_accent = criterion(out_accent, accents)
         loss = loss_accent
@@ -15,8 +15,10 @@ def get_mixed_loss(criterion, out_text, out_accent, out_lens, accents, transcrip
     else:
         loss_text = criterion[0](out_text, transcripts, out_lens, transcripts_lens)
         loss_accent = criterion[1](out_accent, accents)
+
         if loss_accent.is_cuda:
             loss_text = loss_text.cuda()
+            
         loss = mix * loss_text + (1 - mix) * loss_accent * corrective_coef
         
     return loss, loss_text, loss_accent
@@ -24,7 +26,7 @@ def get_mixed_loss(criterion, out_text, out_accent, out_lens, accents, transcrip
 
 ### TRAINING
 
-def train(model, train_loader, criterion, optimizer, losses_mix=None):
+def train(model, train_loader, criterion, optimizer, losses_mix=0.5):
     epoch_losses = []
     epoch_losses_text = []
     epoch_losses_accent = []
@@ -59,22 +61,6 @@ def train(model, train_loader, criterion, optimizer, losses_mix=None):
         epoch_losses_text.append(lt)
         epoch_losses_accent.append(la)
                 
-        del data
-        del inputs
-        del inputs_lens
-        del transcripts
-        del transcripts_lens
-        del accents
-        del loss
-        del loss_text
-        del loss_accent
-        del out_text
-        del out_accent
-        del out_lens
-        del __
-
-        gc.collect()
-        torch.cuda.empty_cache()
 
     average_loss = lambda l: sum(l) / len(train_loader) if l[0] is not None else -1
 
@@ -121,7 +107,7 @@ def check_acc(accents, out):
     return acc.item() / len(accents) * 100
 
 
-def test(model, test_loader, criterion, decoder, target_decoder, losses_mix=None):
+def test(model, test_loader, criterion, decoder, target_decoder, losses_mix=0.5):
     with torch.no_grad():
         model.eval()
 
@@ -144,9 +130,13 @@ def test(model, test_loader, criterion, decoder, target_decoder, losses_mix=None
 
             out_text, out_accent, out_lens, __ = model(inputs, inputs_lens)
 
-            loss, loss_text, loss_accent = get_mixed_loss(criterion, out_text, out_accent, 
+
+            if accents is None or len(model._meta['accents_dict']) > max(accents) + 1: # Check if we are testing a model with different accents
+                loss, loss_text, loss_accent = get_mixed_loss(criterion, out_text, out_accent, 
                                                           out_lens, accents, transcripts, 
                                                           transcripts_lens, losses_mix)
+            else: # in that case we do not care about the loss, section to refactor.
+                loss, loss_text, loss_accent = torch.tensor([-1]), torch.tensor([-1]), torch.tensor([-1])
 
             if out_text is not None:
                 wer = check_wer(transcripts, transcripts_lens, 
@@ -169,24 +159,6 @@ def test(model, test_loader, criterion, decoder, target_decoder, losses_mix=None
             epoch_wers.append(wer)
             epoch_accent_accs.append(accent_acc)
             
-            del wer
-            del accent_acc
-            del data
-            del inputs
-            del inputs_lens
-            del transcripts
-            del transcripts_lens
-            del accents
-            del loss
-            del loss_text
-            del loss_accent
-            del out_text
-            del out_accent
-            del out_lens
-            del __
-            
-            gc.collect()
-            torch.cuda.empty_cache()
                     
                 
 

@@ -1,4 +1,6 @@
+
 bak/
+log.txt
 *.wav
 mfccs/
 embeddings*/
